@@ -77,19 +77,32 @@ class GameBoard:
                 return True
         return False
 
+    def move(self, action):  # kinda sketchy on this one ;(
+        if self.player_turn:
+            action.owner = 'X'
+        else:
+            action.owner = 'O'
+        action.taken = True
+        if self.isComplete():
+            self.GameEnd()
+        else:
+            self.player_turn = not self.player_turn
 
-def set_untried_actions(state):  # See Node below for more info: checks what spaces are available
+    def GameEnd(self):  # TODO add this
+        print("Game Over!")
+
+def get_legal_moves(state):  # See Node below for more info: checks what spaces are available
     legal_moves = []
     if not state.completed:
         if state.meta_game:
-            for board in state.board_squares:
+            for name,board in state.board_squares.items:  #maybe fix the tuple unpacking/.items stuff
                 if not board.taken:
-                    for space in board.sub_game:
+                    for square_name, space in board.sub_game.items:
                         if not space.taken:
                             legal_moves.append(space)
     else:
         if not state.completed:
-            for space in state.squares:
+            for square_name, space in state.squares.items:
                 if not space.taken:
                     legal_moves.append(space)
     return legal_moves
@@ -104,13 +117,33 @@ class MCTSNode:
         self.children = []  # more nodes to be added: every possible move from any given place
         self.num_visits = 0
         self.results = {1: 0, 0: 0, -1: 0}  # 1 corresponds to win, 0 to tie, and -1 to loss
-        self.untried_actions = set_untried_actions(self.State)
+        self.untried_actions = get_legal_moves(self.State)
 
 
     def is_terminal_node(self):   # VERY sketchy on when this will trigger: Ideally I want to check AFTER action/node creation
         if self.game.completed:
             return True
         return False
+
+    def expand(self):
+        action = self.untried_actions.pop(np.random.randint(0, len(self.untried_actions)))  # added randomized first pop
+        self.State.board.move(action)  # check move also why two States?
+        next_state = copy.deepcopy(self.State)
+        child_node = MCTSNode(state=next_state, game=self.game, parent=self, parent_act=action)
+        self.children.append(child_node)
+        return child_node
+
+    def is_fully_expanded(self):  # pretty self-explanatory
+        return len(self.untried_actions) == 0
+
+    def rollout(
+            self):  # From the current state, entire game is simulated till there is an outcome for the game. This outcome of the game is returned
+        current_rollout_state = self.State
+        while not current_rollout_state.board.IsComplete():
+            possible_moves = current_rollout_state.board.get_legal_actions()
+            action = self.rollout_policy(possible_moves)  # TODO CHECK THIS
+            current_rollout_state.board.move(action)      # TODO check to see if this needs to be refreshed (crrent state = state)
+        return current_rollout_state.game_result()
 
     def n(self):  # Returns the number of times each node is visited
         return self._num_visits
@@ -126,6 +159,6 @@ class SimulationGame:
         self.State = copy.deepcopy(game_board)  # MAYBE THIS IS INCORRECT???
 
 class GameState:
-    def __init__(self,state,parent_action):
-        self.State = state
+    def __init__(self, state, parent_action):
+        self.board = state
         self.parent_action = parent_action
