@@ -11,48 +11,50 @@ class GameSquare:
                      'BL', 'BM', 'BR']
     OWNER_LIST = ['X', 'O']  # Potentially redundant list of possible owners
 
-    def __init__(self, position, board=False):
+    def __init__(self, position, game_board, is_board=False):
         self.taken = False  # Has this space been taken?
         self.owner = None  # Who owns this space?
-        self.board = board  # Is this space also a game board?
+        self.game_board = game_board  # In what board is this square?
+        self.is_board = is_board  # Is this space also a game board?
         try:
             if position in GameSquare.POSITION_LIST:
                 self.position = position
         except NameError:
             print('Invalid position. Uses form UM for UpperMiddle. See README for more information.')
-        if board:
-            self.sub_game = GameBoard(meta_game=False)  # Defaults to false but for clarity I put it there
+        if is_board:
+            self.sub_game = GameBoard(meta_game=False,parent_square=self)  # Defaults to false/None but for here clarity
 
 
 # This class represents the game board itself. It contains methods to check if game is completed and its initial setup.
 # This class also contains general game info like player turn and current board stati.
 class GameBoard:
-    def __init__(self, meta_game=False):
+    def __init__(self, meta_game=False, parent_square = None):
         self.player_turn = True  # True for player turn, false for algorithm turn.
         self.meta_game = meta_game
         self.active_board = True  # At creation, all boards are active because they are legal moves (meta always active)
         self.completed = False
         self.winner = None  # probably redundant
+        self.parent_square = parent_square
         if meta_game:
-            self.squares = {'UL': GameSquare('UL', board=True),  # possibly rename to UL_Board?
-                            'UM': GameSquare('UM', board=True),
-                            'UR': GameSquare('UR', board=True),
-                            'ML': GameSquare('ML', board=True),
-                            'MM': GameSquare('MM', board=True),
-                            'MR': GameSquare('MR', board=True),
-                            'BL': GameSquare('BL', board=True),
-                            'BM': GameSquare('BM', board=True),
-                            'BR': GameSquare('BR', board=True)}
+            self.squares = {'UL': GameSquare('UL', self, is_board=True),  # possibly rename to UL_Board?
+                            'UM': GameSquare('UM', self, is_board=True),
+                            'UR': GameSquare('UR', self, is_board=True),
+                            'ML': GameSquare('ML', self, is_board=True),
+                            'MM': GameSquare('MM', self, is_board=True),
+                            'MR': GameSquare('MR', self, is_board=True),
+                            'BL': GameSquare('BL', self, is_board=True),
+                            'BM': GameSquare('BM', self, is_board=True),
+                            'BR': GameSquare('BR', self, is_board=True)}
         else:
-            self.squares = {'UL': GameSquare('UL'),  # possibly redundant??
-                            'UM': GameSquare('UM'),
-                            'UR': GameSquare('UR'),
-                            'ML': GameSquare('ML'),
-                            'MM': GameSquare('MM'),
-                            'MR': GameSquare('MR'),
-                            'BL': GameSquare('BL'),
-                            'BM': GameSquare('BM'),
-                            'BR': GameSquare('BR')}
+            self.squares = {'UL': GameSquare('UL', self),  # possibly redundant??
+                            'UM': GameSquare('UM', self),
+                            'UR': GameSquare('UR', self),
+                            'ML': GameSquare('ML', self),
+                            'MM': GameSquare('MM', self),
+                            'MR': GameSquare('MR', self),
+                            'BL': GameSquare('BL', self),
+                            'BM': GameSquare('BM', self),
+                            'BR': GameSquare('BR', self)}
 
         self.WIN_CONS = [
             (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['UM'].owner) and (
@@ -79,53 +81,89 @@ class GameBoard:
         for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
             if v.taken is None:
                 return False
-        return False
+        return True  # no winner and all items are taken = draw
 
-    def move(self, target):  # kinda sketchy on this one ;(
-        if self.player_turn:
-            target.owner = 'X'
-        else:
-            target.owner = 'O'
-        target.taken = True
-        self.completed = self.is_complete()
-        if self.completed and self.meta_game:
-            self.game_end()  # TODO SEE BELOW
-        else:
+    def initial_move(self,meta_target, target):
+        if self.meta_game:
+            self.squares[meta_target].sub_game.squares[target].taken = True
+            self.squares[meta_target].sub_game.squares[target].owner = 'X'
+            return self.squares[meta_target].sub_game
+
+    def move(self, target):
+        target = target # remane var
+        key = None
+        if isinstance(target, str):
+            target = self.squares[target]
+
+        if target in get_legal_moves(self):
+            if self.player_turn:
+                target.owner = 'X'
+            else:
+                target.owner = 'O'
+            target.taken = True
+            # if not self.meta_game: removed this because it should never be meta game I think :/
+            for k, v in self.squares.items():
+                if v == target:
+                    key = k
+            for name, square in self.parent_square.game_board.squares.items():
+                if name == key:
+                    square.sub_game.active_board = True
+                else:
+                    square.sub_game.active_board = False
+
+            self.completed = self.is_complete()
+            if self.completed:
+                if self.player_turn:
+                    self.winner = 'X'
+                else:
+                    self.winner = 'O'
+                self.parent_square.taken = True
+                self.parent_square.owner = self.winner
+            self.parent_square.game_board.completed = self.parent_square.game_board.is_complete()
+            if self.parent_square.game_board.completed:
+                self.game_end()
             self.player_turn = not self.player_turn
-        return self
+            return self
+        else:
+            print('Error: Invalid target')  # TODO ADD ERROR CHECKING
+            return self  # not right for errors?
 
     def game_end(self):  # TODO add this
-        if self.player_turn:
-            self.winner = 'X'
-        else:
-            self.winner = 'O'
-        #  print("Game Over, winner: {}".format(self.winner))
+        print("Game Over, winner: {}".format(self.winner))
 
 
-def get_legal_moves(state):  # See Node below for more info: checks what spaces are available
+def get_legal_moves(state):  # steps out into meta_game board then checks what spaces are available
     """ Determines legal moves """
+    current_board = state
     legal_moves = []
-    if not state.completed:
-        if state.meta_game:
-            for name, board in state.squares.items:  # maybe fix the tuple unpacking/.items stuff
-                if not board.taken:
-                    for _, space in board.sub_game.items():
-                        if not space.taken:  # does this check for None?
-                            legal_moves.append(space)
-    else:
-        if not state.completed:
-            for square_name, space in state.squares.items:
-                if not space.taken:
-                    legal_moves.append(space)
+    play_anywhere_flag = False
+    if not current_board.meta_game:  # gets to meta-game board
+        current_board = current_board.parent_square.game_board
+
+    if not current_board.completed:  # game not over
+        for _, board in current_board.squares.items():  # maybe fix the tuple unpacking/.items stuff
+            if board.sub_game.active_board and (not board.taken or not board.sub_game.completed):
+                for _,square in board.sub_game.squares.items():
+                    if not square.taken:
+                        legal_moves.append(square)
+            elif board.sub_game.active_board and (board.taken or board.sub_game.completed):
+                play_anywhere_flag = True
+                break
+    if play_anywhere_flag:
+        for _, board in current_board.squares.items(): # becomes gameSquare class
+            if (not board.taken) or board.sub_game.completed:
+                for _, space in board.sub_game.squares.items():
+                    if not space.taken:  # does this check for None?
+                        legal_moves.append(space)
+
     return legal_moves
 
 
 class MCTSNode:
-    def __init__(self, state, game, parent=None, parent_act=None):
-        self.State = GameState(state, parent_act)  # Get the state of the board and the previous move
+    def __init__(self, state, game, parent=None):
+        self.State = copy.deepcopy(state)  # Get the state of the board and the previous move
         self.game = game  # Reference to the game it is in (useful for checking game end trigger)
         self.parent = parent
-        self.parent_action = parent_act
         self.children = []  # more nodes to be added: every possible move from any given place
         self.num_visits = 0
         self.results = {1: 0, 0: 0, -1: 0}  # 1 corresponds to win, 0 to tie, and -1 to loss
@@ -140,7 +178,7 @@ class MCTSNode:
         action = self.untried_actions.pop(np.random.randint(0, len(self.untried_actions)))  # randomized first pop
         next_state = copy.deepcopy(self.State)
         next_state.board.move(action)
-        child_node = MCTSNode(state=next_state, game=self.game, parent=self, parent_act=action)
+        child_node = MCTSNode(state=next_state, game=self.game, parent=self)
         self.children.append(child_node)
         return child_node
 
@@ -212,11 +250,7 @@ class SimulationGame:
         self.State = copy.deepcopy(game_board)
 
 
-class GameState:
-    def __init__(self, state, parent_action):
-        self.board = state
-        self.parent_action = parent_action
-
-
 if __name__ == '__main__':
-    print('test')
+    main_game = GameBoard(meta_game=True)
+    tree = MCTSNode(main_game.initial_move('UL', 'MM'),  main_game)
+    tree.best_action()
