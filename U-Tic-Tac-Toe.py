@@ -22,13 +22,14 @@ class GameSquare:
         except NameError:
             print('Invalid position. Uses form UM for UpperMiddle. See README for more information.')
         if is_board:
-            self.sub_game = GameBoard(meta_game=False,parent_square=self)  # Defaults to false/None but for here clarity
+            self.sub_game = GameBoard(meta_game=False,
+                                      parent_square=self)  # Defaults to false/None but for here clarity
 
 
 # This class represents the game board itself. It contains methods to check if game is completed and its initial setup.
 # This class also contains general game info like player turn and current board stati.
 class GameBoard:
-    def __init__(self, meta_game=False, parent_square = None):
+    def __init__(self, meta_game=False, parent_square=None):
         self.player_turn = True  # True for player turn, false for algorithm turn.
         self.meta_game = meta_game
         self.active_board = True  # At creation, all boards are active because they are legal moves (meta always active)
@@ -79,32 +80,28 @@ class GameBoard:
             if expr:
                 return True
         for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
-            if v.taken is None:
+            if v.owner is None or v.taken is False:
                 return False
         return True  # no winner and all items are taken = draw
 
-    def initial_move(self,meta_target, target):
+    def initial_move(self, meta_target, target):
         if self.meta_game:
-            self.squares[meta_target].sub_game.squares[target].taken = True
-            self.squares[meta_target].sub_game.squares[target].owner = 'X'
-            return self.squares[meta_target].sub_game
+            return self.squares[meta_target].sub_game.move(target)
 
     def move(self, target):
-        target = target # remane var
+        target = target  # rename var
         key = None
         if isinstance(target, str):
             target = self.squares[target]
-
-        if target in get_legal_moves(self):
+        legal_moves = get_legal_moves(self)
+        if target in legal_moves:
             if self.player_turn:
                 target.owner = 'X'
             else:
                 target.owner = 'O'
             target.taken = True
             # if not self.meta_game: removed this because it should never be meta game I think :/
-            for k, v in self.squares.items():
-                if v == target:
-                    key = k
+            key = target.position
             for name, square in self.parent_square.game_board.squares.items():
                 if name == key:
                     square.sub_game.active_board = True
@@ -143,14 +140,14 @@ def get_legal_moves(state):  # steps out into meta_game board then checks what s
     if not current_board.completed:  # game not over
         for _, board in current_board.squares.items():  # maybe fix the tuple unpacking/.items stuff
             if board.sub_game.active_board and (not board.taken or not board.sub_game.completed):
-                for _,square in board.sub_game.squares.items():
+                for _, square in board.sub_game.squares.items():
                     if not square.taken:
                         legal_moves.append(square)
             elif board.sub_game.active_board and (board.taken or board.sub_game.completed):
                 play_anywhere_flag = True
                 break
     if play_anywhere_flag:
-        for _, board in current_board.squares.items(): # becomes gameSquare class
+        for _, board in current_board.squares.items():  # becomes gameSquare class
             if (not board.taken) or board.sub_game.completed:
                 for _, space in board.sub_game.squares.items():
                     if not space.taken:  # does this check for None?
@@ -167,7 +164,7 @@ class MCTSNode:
         self.children = []  # more nodes to be added: every possible move from any given place
         self.num_visits = 0
         self.results = {1: 0, 0: 0, -1: 0}  # 1 corresponds to win, 0 to tie, and -1 to loss
-        self.untried_actions = get_legal_moves(self.State.board)
+        self.untried_actions = get_legal_moves(self.State)
 
     def is_terminal_node(self):  # CHECK WHEN THIS TRIGGERS
         if self.game.completed:
@@ -175,10 +172,12 @@ class MCTSNode:
         return False
 
     def expand(self):
-        action = self.untried_actions.pop(np.random.randint(0, len(self.untried_actions)))  # randomized first pop
-        next_state = copy.deepcopy(self.State)
-        next_state.board.move(action)
+        act_index = np.random.randint(0, len(self.untried_actions))  # randomized index for pop
+        next_state = copy.deepcopy(self.State)  # copies state for child node
+        del self.untried_actions[act_index]  # removes action from parent node
         child_node = MCTSNode(state=next_state, game=self.game, parent=self)
+        action = child_node.untried_actions.pop(act_index)  # sets action for child node
+        child_node.State.move(action)
         self.children.append(child_node)
         return child_node
 
@@ -187,19 +186,18 @@ class MCTSNode:
 
     def rollout(
             self):  # From the current state, entire game is simulated till there is an outcome for the game. This outcome of the game is returned
-        current_rollout_state = SimulationGame(self.State)
-        while not current_rollout_state.board.is_complete():
-            possible_moves = current_rollout_state.board.get_legal_actions()
+        current_rollout_state = copy.deepcopy(self.State)
+        while not current_rollout_state.parent_square.game_board.is_complete():
+            possible_moves = get_legal_moves(current_rollout_state)
             action = self.rollout_policy(possible_moves)
-            current_rollout_state = current_rollout_state.board.move(action)
-        current_rollout_state.board.game_end()  # sets winner of the game based on whose turn it is when game ended
+            current_rollout_state = current_rollout_state.move(action)
         return 1 if current_rollout_state.board.winner == 'O' else -1  # is returned to backpropogate
 
     def rollout_policy(self, possible_moves):  # Randomly selects a move out of possible moves.
         return possible_moves[np.random.randint(0, len(possible_moves))]
 
-    def tree_policy(self):  # expands tree until
-        if self.State.board.player_turn:
+    def tree_policy(self):  # expands tree until full
+        if self.State.player_turn:
             current_node = self.expand()  # randomly expands once to randomly pick player move
         else:
             current_node = self
@@ -221,7 +219,7 @@ class MCTSNode:
             reward = v.rollout()  # simulation
             v.backpropagate(reward)  # backpropagation
         best_child = self.best_child(c_param=0.1)
-        return best_child.best_action(simulation_n, num_layers-1)  # recursively finds the best child for n_layers
+        return best_child.best_action(simulation_n, num_layers - 1)  # recursively finds the best child for n_layers
 
     def backpropagate(self, result):
         self.num_visits += 1.
@@ -245,12 +243,8 @@ class MCTSNode:
         return wins - losses
 
 
-class SimulationGame:
-    def __init__(self, game_board):
-        self.State = copy.deepcopy(game_board)
-
-
 if __name__ == '__main__':
     main_game = GameBoard(meta_game=True)
-    tree = MCTSNode(main_game.initial_move('UL', 'MM'),  main_game)
-    tree.best_action()
+    tree = MCTSNode(main_game.initial_move('UL', 'MM'), main_game)
+    best_move = tree.best_action()
+    print(best_move.State.parent_square.position)
