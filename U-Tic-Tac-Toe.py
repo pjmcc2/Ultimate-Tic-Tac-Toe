@@ -57,7 +57,8 @@ class GameBoard:
                             'BM': GameSquare('BM', self),
                             'BR': GameSquare('BR', self)}
 
-        self.WIN_CONS = [
+    def is_complete(self):
+        WIN_CONS = [
             (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['UM'].owner) and (
                     self.squares['UM'].owner == self.squares['UR'].owner),  # Top Row
             (self.squares['ML'].owner is not None) and (self.squares['ML'].owner == self.squares['MM'].owner) and (
@@ -74,9 +75,7 @@ class GameBoard:
                     self.squares['MM'].owner == self.squares['BR'].owner),  # L-R Diagonal
             (self.squares['UR'].owner is not None) and (self.squares['UR'].owner == self.squares['MM'].owner) and (
                     self.squares['MM'].owner == self.squares['BL'].owner)]  # R-L Diagonal
-
-    def is_complete(self):
-        for expr in self.WIN_CONS:  # Iterate over win/tie conditions to see if any are true, else return false
+        for expr in WIN_CONS:  # Iterate over win/tie conditions to see if any are true, else return false
             if expr:
                 return True
         for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
@@ -120,6 +119,7 @@ class GameBoard:
             if self.parent_square.game_board.completed:
                 self.game_end()
             self.player_turn = not self.player_turn
+            print(print_board(self.parent_square.game_board))
             return self
         else:
             print('Error: Invalid target')  # TODO ADD ERROR CHECKING
@@ -156,6 +156,47 @@ def get_legal_moves(state):  # steps out into meta_game board then checks what s
     return legal_moves
 
 
+def print_board(board):
+    """Prints visual representation of the Board"""
+    base_string = ""
+    counter1 = 0
+    counter2 = 3
+    inner_counter1 = 0
+    inner_counter2 = 3
+    POSITION_LIST = ['UL', 'UM', 'UR',  # Possible options for position: U = Upper, M = middle, B = bottom,
+                     'ML', 'MM', 'MR',  # L = left, R = right
+                     'BL', 'BM', 'BR']
+    if board.meta_game:
+        for i in range(3):
+            for j in range(3):
+                for name1 in POSITION_LIST[counter1: counter2]:
+                    for name2 in POSITION_LIST[inner_counter1: inner_counter2]:
+                        if board.squares[name1].sub_game.squares[name2].owner is not None:
+                            base_string += " " + board.squares[name1].sub_game.squares[name2].owner + " "
+                        else:
+                            base_string += " - "
+                    base_string += '|'
+                base_string += '\n'
+                inner_counter1 += 3
+                inner_counter2 += 3
+            inner_counter1 = 0
+            inner_counter2 = 3
+            base_string += ("_" * 30) + '\n'
+            counter1 += 3
+            counter2 += 3
+    else:
+        for _, square in board.squares.items():
+            counter1 += 1
+            if square.owner is not None:
+                base_string += " " + square.owner + " "
+            else:
+                base_string += ' - '
+            if counter1 == 3:
+                counter1 = 0
+                base_string += base_string + '\n'  # TODO ADD |
+                base_string = ''
+    return base_string
+
 class MCTSNode:
     def __init__(self, state, game, parent=None):
         self.State = copy.deepcopy(state)  # Get the state of the board and the previous move
@@ -177,7 +218,7 @@ class MCTSNode:
         del self.untried_actions[act_index]  # removes action from parent node
         child_node = MCTSNode(state=next_state, game=self.game, parent=self)
         action = child_node.untried_actions.pop(act_index)  # sets action for child node
-        child_node.State.move(action)
+        child_node.State.move(action) # TODO fix repeats (also is complete doesnt work)
         self.children.append(child_node)
         return child_node
 
@@ -248,3 +289,8 @@ if __name__ == '__main__':
     tree = MCTSNode(main_game.initial_move('UL', 'MM'), main_game)
     best_move = tree.best_action()
     print(best_move.State.parent_square.position)
+
+
+
+
+
