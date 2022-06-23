@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-
+import random
 
 # This class represents the individual square of a game board. Because this is a game of ultimate tic tac toe,
 # the square can be a board itself.
@@ -57,30 +57,43 @@ class GameBoard:
                             'BM': GameSquare('BM', self),
                             'BR': GameSquare('BR', self)}
 
-    def is_complete(self):
-        WIN_CONS = [
-            (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['UM'].owner) and (
-                    self.squares['UM'].owner == self.squares['UR'].owner),  # Top Row
-            (self.squares['ML'].owner is not None) and (self.squares['ML'].owner == self.squares['MM'].owner) and (
-                    self.squares['MM'].owner == self.squares['MR'].owner),  # Middle Row
-            (self.squares['BL'].owner is not None) and (self.squares['BL'].owner == self.squares['BM'].owner) and (
-                    self.squares['BM'].owner == self.squares['BR'].owner),  # Bottom Row
-            (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['ML'].owner) and (
-                    self.squares['ML'].owner == self.squares['BL'].owner),  # Left Column
-            (self.squares['UM'].owner is not None) and (self.squares['UM'].owner == self.squares['MM'].owner) and (
-                    self.squares['MM'].owner == self.squares['BM'].owner),  # Middle Column
-            (self.squares['UR'].owner is not None) and (self.squares['UR'].owner == self.squares['MR'].owner) and (
-                    self.squares['MR'].owner == self.squares['BR'].owner),  # Right Column
-            (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['MM'].owner) and (
-                    self.squares['MM'].owner == self.squares['BR'].owner),  # L-R Diagonal
-            (self.squares['UR'].owner is not None) and (self.squares['UR'].owner == self.squares['MM'].owner) and (
-                    self.squares['MM'].owner == self.squares['BL'].owner)]  # R-L Diagonal
-        for expr in WIN_CONS:  # Iterate over win/tie conditions to see if any are true, else return false
-            if expr:
-                return True
-        for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
-            if v.owner is None or v.taken is False:
-                return False
+    def is_complete(self):  # Iterate over win/tie conditions to see if any are true, else return false
+        if (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['UM'].owner) and (
+                self.squares['UM'].owner == self.squares['UR'].owner):  # Top Row
+            self.winner = self.squares['UL'].owner
+            return True
+        elif (self.squares['ML'].owner is not None) and (self.squares['ML'].owner == self.squares['MM'].owner) and (
+                self.squares['MM'].owner == self.squares['MR'].owner):  # Middle Row
+            self.winner = self.squares['ML'].owner
+            return True
+        elif (self.squares['BL'].owner is not None) and (self.squares['BL'].owner == self.squares['BM'].owner) and (
+                self.squares['BM'].owner == self.squares['BR'].owner):  # Bottom Row
+            self.winner = self.squares['BL'].owner
+            return True
+        elif (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['ML'].owner) and (
+                self.squares['ML'].owner == self.squares['BL'].owner):  # Left Column
+            self.winner = self.squares['UL'].owner
+            return True
+        elif (self.squares['UM'].owner is not None) and (self.squares['UM'].owner == self.squares['MM'].owner) and (
+                self.squares['MM'].owner == self.squares['BM'].owner):  # Middle Column
+            self.winner = self.squares['UM'].owner
+            return True
+        elif (self.squares['UR'].owner is not None) and (self.squares['UR'].owner == self.squares['MR'].owner) and (
+                self.squares['MR'].owner == self.squares['BR'].owner):  # Right Column
+            self.winner = self.squares['UR'].owner
+            return True
+        elif (self.squares['UL'].owner is not None) and (self.squares['UL'].owner == self.squares['MM'].owner) and (
+                self.squares['MM'].owner == self.squares['BR'].owner):  # L-R Diagonal
+            self.winner = self.squares['UL'].owner
+            return True
+        elif (self.squares['UR'].owner is not None) and (self.squares['UR'].owner == self.squares['MM'].owner) and (
+                self.squares['MM'].owner == self.squares['BL'].owner):  # R-L Diagonal
+            self.winner = self.squares['UR'].owner
+            return True
+        else:
+            for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
+                if (v.owner is None) or (v.taken is False):
+                    return False
         return True  # no winner and all items are taken = draw
 
     def initial_move(self, meta_target, target):
@@ -107,26 +120,24 @@ class GameBoard:
                 else:
                     square.sub_game.active_board = False
 
-            self.completed = self.is_complete()
-            if self.completed:
-                if self.player_turn:
-                    self.winner = 'X'
-                else:
-                    self.winner = 'O'
-                self.parent_square.taken = True
-                self.parent_square.owner = self.winner
+            target.game_board.completed = target.game_board.is_complete()
+            if target.game_board.completed:
+
+                target.game_board.parent_square.taken = True
+                target.game_board.parent_square.owner = target.game_board.winner
             self.parent_square.game_board.completed = self.parent_square.game_board.is_complete()
+            #self.parent_square.game_board.winner = target.game_board.winner
             if self.parent_square.game_board.completed:
                 self.game_end()
             self.player_turn = not self.player_turn
-            print(print_board(self.parent_square.game_board))
+            print(print_board(self.parent_square.game_board))  # for debugging
             return self
         else:
             print('Error: Invalid target')  # TODO ADD ERROR CHECKING
             return self  # not right for errors?
 
     def game_end(self):  # TODO add this
-        print("Game Over, winner: {}".format(self.winner))
+        print("Game Over, winner: {}".format(self.parent_square.game_board.winner))
 
 
 def get_legal_moves(state):  # steps out into meta_game board then checks what spaces are available
@@ -198,27 +209,31 @@ def print_board(board):
     return base_string
 
 class MCTSNode:
-    def __init__(self, state, game, parent=None):
+    def __init__(self, state, game, parent=None, parent_action = None):
         self.State = copy.deepcopy(state)  # Get the state of the board and the previous move
         self.game = game  # Reference to the game it is in (useful for checking game end trigger)
         self.parent = parent
+        self.parent_action = parent_action
         self.children = []  # more nodes to be added: every possible move from any given place
         self.num_visits = 0
         self.results = {1: 0, 0: 0, -1: 0}  # 1 corresponds to win, 0 to tie, and -1 to loss
         self.untried_actions = get_legal_moves(self.State)
 
-    def is_terminal_node(self):  # CHECK WHEN THIS TRIGGERS
+    def is_terminal_node(self):  # TODO change to check when MAIN game ends?
         if self.game.completed:
             return True
         return False
 
     def expand(self):
-        act_index = np.random.randint(0, len(self.untried_actions))  # randomized index for pop
+        action = self.untried_actions.pop(np.random.randint(0, len(self.untried_actions)))  # randomized index for pop
         next_state = copy.deepcopy(self.State)  # copies state for child node
-        del self.untried_actions[act_index]  # removes action from parent node
-        child_node = MCTSNode(state=next_state, game=self.game, parent=self)
-        action = child_node.untried_actions.pop(act_index)  # sets action for child node
-        child_node.State.move(action) # TODO fix repeats (also is complete doesnt work)
+        next_state_actions = get_legal_moves(next_state)
+        random.shuffle(next_state_actions)  # makes sure not in order in case of multiple matches for position
+        for square in next_state_actions:
+            if square.position == action.position:  # finds equivalent position in copy
+                next_state = next_state.move(square)
+                child_node = MCTSNode(state=next_state, game=self.game, parent=self,parent_action=square)
+                break
         self.children.append(child_node)
         return child_node
 
@@ -230,9 +245,17 @@ class MCTSNode:
         current_rollout_state = copy.deepcopy(self.State)
         while not current_rollout_state.parent_square.game_board.is_complete():
             possible_moves = get_legal_moves(current_rollout_state)
-            action = self.rollout_policy(possible_moves)
+            try:
+                action = self.rollout_policy(possible_moves)
+            except:
+                return 0
             current_rollout_state = current_rollout_state.move(action)
-        return 1 if current_rollout_state.board.winner == 'O' else -1  # is returned to backpropogate
+        if current_rollout_state.parent_square.game_board.winner == 'O':   # is returned to backpropogate
+            return 1
+        elif current_rollout_state.parent_square.game_board.winner == 'X':
+            return -1
+        else:
+            return 0
 
     def rollout_policy(self, possible_moves):  # Randomly selects a move out of possible moves.
         return possible_moves[np.random.randint(0, len(possible_moves))]
@@ -244,24 +267,28 @@ class MCTSNode:
             current_node = self
         while not current_node.is_terminal_node():
             if not current_node.is_fully_expanded():
-                _ = self.expand()
+                _ = current_node.expand()
             else:
-                return self.children[
-                    np.random.randint(0, len(self.children))]  # randomly returns one of the children nodes
+                return current_node.children[
+                    np.random.randint(0, len(current_node.children))]  # randomly returns one of the children nodes
         return current_node
 
     # The best action function returns the node corresponding to the best possible move.
     def best_action(self, n_iter=100,  # starts from 0 (so 2 layers is 3 layers deep)
-                    num_layers=2):
+                    ):
         simulation_n = n_iter
         best_child = None
-        for _ in range(simulation_n):
+        for i in range(simulation_n):
             v = self.tree_policy()  # expansion
             reward = v.rollout()  # simulation
             v.backpropagate(reward)  # backpropagation
+            print('Game: {}'.format(i))  # for debugging
         best_child = self.best_child(c_param=0.1)
-        return best_child.best_action(simulation_n, num_layers - 1)  # recursively finds the best child for n_layers
-
+        #if num_layers > 0:
+         #   return best_child.best_action(simulation_n, num_layers - 1)  # recursively finds the best child for n_layers
+        #else:
+        #    return best_child
+        return best_child
     def backpropagate(self, result):
         self.num_visits += 1.
         self.results[result] += 1.
@@ -270,7 +297,7 @@ class MCTSNode:
 
     def best_child(self,
                    c_param=0.1):  # this is the function that determines the best child node. Note the tweak-able parameter
-        choices_weights = [(c.q() / c.n()) + c_param * np.sqrt((2 * np.log(self.n()) / c.n())) for c in self.children]
+        choices_weights = [(c.q() / c.n()) + c_param * np.sqrt((2 * np.log(self.n()) / c.n())) for c in self.children if c.n() != 0]
         return self.children[np.argmax(choices_weights)]
 
     def n(self):  # Returns the number of times each node is visited
@@ -287,8 +314,8 @@ class MCTSNode:
 if __name__ == '__main__':
     main_game = GameBoard(meta_game=True)
     tree = MCTSNode(main_game.initial_move('UL', 'MM'), main_game)
-    best_move = tree.best_action()
-    print(best_move.State.parent_square.position)
+    best_move = tree.best_action(100)
+    print(best_move.parent_action.position)
 
 
 
