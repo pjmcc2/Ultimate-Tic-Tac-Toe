@@ -91,7 +91,7 @@ class GameBoard:
             self.winner = self.squares['UR'].owner
             return True
         else:
-            for _, v in self.squares.items():  # Checks if there are still unclaimed spaces
+            for v in self.squares.values():  # Checks if there are still unclaimed spaces
                 if (v.owner is None) or (v.taken is False):
                     return False
         return True  # no winner and all items are taken = draw
@@ -127,10 +127,10 @@ class GameBoard:
                 target.game_board.parent_square.owner = target.game_board.winner
             self.parent_square.game_board.completed = self.parent_square.game_board.is_complete()
             #self.parent_square.game_board.winner = target.game_board.winner
-            if self.parent_square.game_board.completed:
-                self.game_end()
+            #if self.parent_square.game_board.completed:
+                #self.game_end()
             self.player_turn = not self.player_turn
-            print(print_board(self.parent_square.game_board))  # for debugging
+            #print(print_board(self.parent_square.game_board))  # for debugging
             return self
         else:
             print('Error: Invalid target')  # TODO ADD ERROR CHECKING
@@ -149,18 +149,18 @@ def get_legal_moves(state):  # steps out into meta_game board then checks what s
         current_board = current_board.parent_square.game_board
 
     if not current_board.completed:  # game not over
-        for _, board in current_board.squares.items():  # maybe fix the tuple unpacking/.items stuff
+        for board in current_board.squares.values():
             if board.sub_game.active_board and (not board.taken or not board.sub_game.completed):
-                for _, square in board.sub_game.squares.items():
+                for square in board.sub_game.squares.values():
                     if not square.taken:
                         legal_moves.append(square)
             elif board.sub_game.active_board and (board.taken or board.sub_game.completed):
                 play_anywhere_flag = True
                 break
     if play_anywhere_flag:
-        for _, board in current_board.squares.items():  # becomes gameSquare class
+        for  board in current_board.squares.values():  # becomes gameSquare class
             if (not board.taken) or board.sub_game.completed:
-                for _, space in board.sub_game.squares.items():
+                for space in board.sub_game.squares.values():
                     if not space.taken:  # does this check for None?
                         legal_moves.append(space)
 
@@ -196,7 +196,7 @@ def print_board(board):
             counter1 += 3
             counter2 += 3
     else:
-        for _, square in board.squares.items():
+        for square in board.squares.values():
             counter1 += 1
             if square.owner is not None:
                 base_string += " " + square.owner + " "
@@ -282,7 +282,7 @@ class MCTSNode:
             v = self.tree_policy()  # expansion
             reward = v.rollout()  # simulation
             v.backpropagate(reward)  # backpropagation
-            print('Game: {}'.format(i))  # for debugging
+            #print('Game: {}'.format(i))  # for debugging
         best_child = self.best_child(c_param=0.1)
         #if num_layers > 0:
          #   return best_child.best_action(simulation_n, num_layers - 1)  # recursively finds the best child for n_layers
@@ -313,9 +313,19 @@ class MCTSNode:
 
 if __name__ == '__main__':
     main_game = GameBoard(meta_game=True)
-    tree = MCTSNode(main_game.initial_move('UL', 'MM'), main_game)
+    fmove1 = input("first board: ")
+    fmove2 = input("first square: ")
+    curr_pos = main_game.initial_move(fmove1, fmove2)
+    tree = MCTSNode(curr_pos, main_game)
+    print(print_board(main_game))
     best_move = tree.best_action(100)
-    print(best_move.parent_action.position)
+    curr_pos = curr_pos.move(best_move.parent_action.position)
+    print(print_board(main_game))
+    while not main_game.is_complete():
+        curr_pos = curr_pos.move(input("Your turn: "))
+        tree = MCTSNode(curr_pos, main_game)
+        curr_pos = curr_pos.move(tree.best_action().parent_action.position)
+        print(print_board(main_game))
 
 
 
