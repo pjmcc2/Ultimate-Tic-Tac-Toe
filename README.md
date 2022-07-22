@@ -11,3 +11,7 @@ NOTES ON POSITION NAMES:
     Example codes: UL - Upper left
                  : MM - Middle middle
                  : BR - Bottom right
+
+
+UPDATE(7/22/22):
+Currently it works for one move before breaking down..... I just need to implement a way to make new moves and I am golden :))
